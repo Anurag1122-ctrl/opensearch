@@ -1,0 +1,15 @@
+version: "3"
+
+services:
+  opensearch:
+    image: markoshust/magento-opensearch:2.5-1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    env_file: opensearch.env
+    environment:
+      - "discovery.type=single-node"
+      ## Avoid test failures due to small disks
+      ## More info at https://github.com/markshust/docker-magento/issues/488
+      - "cluster.routing.allocation.disk.threshold_enabled=false"
+      - "index.blocks.read_only_allow_delete"
