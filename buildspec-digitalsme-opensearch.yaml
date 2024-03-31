@@ -1,0 +1,68 @@
+# REF
+# https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-syntax
+# https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-env-vars.html
+# CODEBUILD_BUILD_NUMBER
+
+# Creat the following to your desired values:
+#   CD_AWS_ACCOUNT_ID
+#   CD_ECR_REGION
+#   CD_ECR_REPOSITORY_NAME
+#   CD_IMAGE_BUILD_ENV
+
+version: 0.2
+env:
+  CD_AWS_ACCOUNT_ID: "193980408680"
+  CD_ECR_REGION: "ap-southeast-1"
+  CD_ECR_REPOSITORY_NAME: "digitalsme-opensearch-prod-image"
+  CD_APP_NAME: "digitalsme-prod-opensearch-app"
+
+phases:
+  install:
+    commands: 
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
+  
+  pre_build:
+    commands:
+      - echo AWS CLI $(aws --version)
+      ## VARIABLES
+      - AWS_ACCOUNT_ID=${CD_AWS_ACCOUNT_ID:-193980408680}
+      - echo AWS_ACCOUNT_ID ${AWS_ACCOUNT_ID}
+      - ECR_REGION=${CD_ECR_REGION:-ap-southeast-1}
+      - echo ECR_REGION ${ECR_REGION}
+      - ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com
+      - echo ECR_URI ${ECR_URI}
+      - ECR_REPOSITORY_NAME=${CD_ECR_REPOSITORY_NAME:-digitalsme-opensearch-prod-image}
+      - echo ECR_REPOSITORY_NAME ${ECR_REPOSITORY_NAME}
+      - REPOSITORY_URI=$ECR_URI/$ECR_REPOSITORY_NAME
+      - echo REPOSITORY_URI ${REPOSITORY_URI}
+      - IMAGE_TAG=build-${CODEBUILD_BUILD_NUMBER}
+      - echo IMAGE_TAG $IMAGE_TAG
+      ## LOGIN TO AWS ECR
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $ECR_REGION | docker login --username AWS --password-stdin $ECR_URI
+      
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - echo List the Docker image...
+      - docker images
+      
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Updating artifact...
+      # imageDetail.json
+      - printf '{"ImageURI":"%s"}' $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG  > imageDetail.json
+      # appspec.yml - AWS Codedeploy 
+
+artifacts:
+  files: 
+    - '**/*'
+  # OUTPUT FOLDER s3:/<name>
+  name: digitalsme-node-app-build-artifacts/$(date +%Y-%m-%d)-build-opensearch-$CODEBUILD_BUILD_NUMBER
